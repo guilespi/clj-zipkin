@@ -107,9 +107,9 @@
    for the code chunk received, defers actual logging to upper trace function"
   [{:keys [span host]} & body]
   (let [body (parse-item body)]
-    `(let [parent-id# (first (deref ~'parent-ids))
+    `(let [parent-id# ~'span-id ;(first (deref ~'parent-ids))
            ~'span-id (rand-int rand-size)
-           _# (swap! ~'parent-ids (fn [l#] (cons ~'span-id l#)))
+          ; _# (println "t" ~'trace-id "s" ~'span-id "p" parent-id#)
            start-time# (time/now)
            result# ~@body
            end-time# (time/now)
@@ -158,7 +158,7 @@
          ~'trace-id (or ~(-> args first :trace-id)
                         (rand-int rand-size))
          ~'span-list (atom [])
-         ~'parent-ids (atom [])
+         ~'span-id nil
          result# (trace* ~(first args) ~@(rest args))
          _# (scribe/log logger# (deref ~'span-list))]
      result#))
