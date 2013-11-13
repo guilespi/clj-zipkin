@@ -67,11 +67,6 @@ Tracing parameters
 
 Work in progress
 
-## TODO
-
-* Default hostname to current host
-* Ring handler
-
 ## License
 
 Copyright © 2013 Guillermo Winkler
