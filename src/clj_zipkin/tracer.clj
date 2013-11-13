@@ -7,6 +7,8 @@
             [clj-time.core :as time]
             [clj-time.coerce :as time-coerce]))
 
+;(def bann (BinaryAnnotation. "name" (byte-streams/convert "abcd" java.nio.ByteBuffer) AnnotationType/STRING nil)) 
+
 (thrift/import
   (:types [com.twitter.zipkin.gen 
            Span Annotation BinaryAnnotation AnnotationType Endpoint 
@@ -38,20 +40,22 @@
   "Given a host in string or map format creates a thrift zipkin endpoint object"
   [host]
   (condp = (class host)
-    java.lang.String (Endpoint. (ip-str-to-int host) 0 "Clojure Service")
+    java.lang.String (Endpoint. (ip-str-to-int host) 0 "Unknown Service")
     clojure.lang.PersistentArrayMap (Endpoint. (ip-str-to-int (:ip host)) 
                                                (or (:port host) 0) 
-                                               (or (:service host) "Clojure Service"))
+                                               (or (:service host) "Unknown Service"))
     (throw "Invalid host value")))
 
 (def rand-size 100000)
 
-(defn create-span
+(defn create-timestamp-span
   "Creates a new span with start/finish annotations"
   [span host trace-id span-id parent-id start finish]
   (let [endpoint (host->endpoint host)
-        start-annotation (Annotation. (* 1000 (time-coerce/to-long start)) (str "start:" (name span)) endpoint 0)
-        finish-annotation (Annotation. (* 1000 (time-coerce/to-long finish)) (str "end:" (name span)) endpoint 0)]
+        start-annotation (Annotation. (* 1000 (time-coerce/to-long start)) 
+                                      (str "start:" (name span)) endpoint 0)
+        finish-annotation (Annotation. (* 1000 (time-coerce/to-long finish)) 
+                                       (str "end:" (name span)) endpoint 0)]
     (thrift->base64 
      (Span. trace-id
             (name span) 
@@ -63,48 +67,89 @@
             0))))
 
 ;;tracing macro for nested recording
-(def ^:dynamic *trace-id*)
-(def ^:dynamic *current-span-id*)
-(def ^:dynamic *logger*)
 
 (defmulti parse-item (fn [form] 
                        (if (seq? form) 
                          :seq
                          :default)))
 
+;;if found a call to original trace in the ast
+;;change for a call to trace* in order to use
+;;only one logger at the top
 (defmethod parse-item :seq
   [form]
   (if (and (symbol? (first form))
-           (= (ns-resolve *ns* (first form)) (ns-resolve 'clj-zipkin.tracer 'trace)))
-    (let [[_ data body] form
-          span-id (rand rand-size)]
-      (list* 'clj-zipkin.tracer/trace* (merge data {:trace-id *trace-id*
-                                                    :parent-id *current-span-id*}) (map parse-item body) '()))
+           (= (ns-resolve *ns* (first form)) 
+              (ns-resolve 'clj-zipkin.tracer 'trace)))
+    (let [[_ data body] form]
+      (list* 'clj-zipkin.tracer/trace* 
+             data
+             (map parse-item body) 
+             '()))
     (doall (map parse-item form))))
 
 (defmethod parse-item :default 
-  [form]
-  form)
+  [item]
+  item)
 
 (defmacro trace*
-  [{:keys [span host trace-id parent-id]} & body]
-  (let [span-id (rand rand-size)
-        trace-id (or trace-id (rand rand-size))
-        body (binding [*trace-id* trace-id
-                       *current-span-id* span-id]
-               (parse-item body))]
-    `(let [start-time# (time/now)
+  "Creates a start/finish timestamp annotations span
+   for the code chunk received, defers actual logging to upper trace function"
+  [{:keys [span host]} & body]
+  (let [body (parse-item body)]
+    `(let [parent-id# (first (deref ~'parent-ids))
+           ~'span-id (rand-int rand-size)
+           _# (swap! ~'parent-ids (fn [l#] (cons ~'span-id l#)))
+           start-time# (time/now)
            result# ~@body
            end-time# (time/now)
-           _# (scribe/log *logger*
-                          [(create-span ~span ~host ~trace-id 
-                                        ~span-id ~parent-id
-                                        start-time# end-time#)])]
+           span# (create-timestamp-span ~span ~host ~'trace-id 
+                                        ~'span-id parent-id#
+                                        start-time# end-time#)
+           ;parent spans added at the end, so cons 
+           _# (swap! ~'span-list (fn [l#] (cons span# l#)))]
        result#)))
 
 (defmacro trace 
+  "Timestamp tracing of a code chunk using timestamp annotations.
+  => (trace options body)
+   
+  options {
+  :host => current host
+  :span => span name
+  :trace-id => optional, new one will be created if not specifyed
+  :scribe => scribe/zipkin endpoint configuration {:host h :port p}
+  }
+
+  Macro uses anaphoras for nested tracing so the following variable names are defined:
+  * trace-id
+  * span-id
+  * span-list
+
+  (trace {:host \"10.0.2.1\" :span \"GET\" :scribe {host \"localhost\" :port 9410}} 
+    (...code to be traced...))
+
+  Trace Id can be specified with the :trace-id option 
+
+  (trace {:host \"10.0.2.1\" :trace-id 12345 :span \"GET\" :scribe {host \"localhost\" :port 9410}} 
+    (...code to be traced...))
+
+  Nested traces are supported and scribe configuration is not needed for inner traces, 
+  those will be treated as child spans of the immediate parent trace
+
+  (trace {:host \"10.0.2.1\" :span \"GET\" :scribe {host \"localhost\" :port 9410}} 
+     (...code to be traced...
+       (trace {:span \"OTHER\"}
+         (..code...))))"
   [& args]
-  `(binding [*logger* (scribe/async-logger :host ~(-> args first :scribe :host) 
-                                           :port ~(-> args first :scribe :port) 
-                                           :category "zipkin")]
-     (trace* ~(first args) ~@(rest args))))
+  `(let [logger# (scribe/async-logger :host ~(-> args first :scribe :host) 
+                                      :port ~(-> args first :scribe :port) 
+                                      :category "zipkin")
+         ~'trace-id (or ~(-> args first :trace-id)
+                        (rand-int rand-size))
+         ~'span-list (atom [])
+         ~'parent-ids (atom [])
+         result# (trace* ~(first args) ~@(rest args))
+         _# (scribe/log logger# (deref ~'span-list))]
+     result#))
+
