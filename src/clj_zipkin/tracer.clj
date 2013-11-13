@@ -74,9 +74,10 @@
 ;;tracing macro for nested recording
 
 (defmulti parse-item (fn [form] 
-                       (if (seq? form) 
-                         :seq
-                         :default)))
+                       (cond 
+                        (seq? form) :seq
+                        (vector? form) :vec
+                        :else :default)))
 
 ;;if found a call to original trace in the ast
 ;;change for a call to trace* in order to use
@@ -92,6 +93,10 @@
              (map parse-item body) 
              '()))
     (doall (map parse-item form))))
+
+(defmethod parse-item :vector 
+  [v]
+  (vec (doall (map parse-item v))))
 
 (defmethod parse-item :default 
   [item]
