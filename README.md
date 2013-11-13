@@ -50,7 +50,8 @@ together specifying the `trace-id` to use.
 
 ```
 
-** Parameters **
+Parameters
+==========
 
 Tracing parameters
 
