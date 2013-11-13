@@ -9,6 +9,8 @@
 
 ;(def bann (BinaryAnnotation. "name" (byte-streams/convert "abcd" java.nio.ByteBuffer) AnnotationType/STRING nil)) 
 
+(def ^:dynamic *default-service-name* "Unknown Service")
+
 (thrift/import
   (:types [com.twitter.zipkin.gen 
            Span Annotation BinaryAnnotation AnnotationType Endpoint 
@@ -40,11 +42,14 @@
   "Given a host in string or map format creates a thrift zipkin endpoint object"
   [host]
   (condp = (class host)
-    java.lang.String (Endpoint. (ip-str-to-int host) 0 "Unknown Service")
+    java.lang.String (Endpoint. (ip-str-to-int host) 0 *default-service-name*)
     clojure.lang.PersistentArrayMap (Endpoint. (ip-str-to-int (:ip host)) 
                                                (or (:port host) 0) 
-                                               (or (:service host) "Unknown Service"))
-    (throw "Invalid host value")))
+                                               (or (:service host) *default-service-name*))
+    nil (Endpoint. (ip-str-to-int (.getHostAddress (java.net.InetAddress/getLocalHost)))
+                   0 
+                   *default-service-name*)
+    (throw (str "Invalid host value" (class host) "not supported"))))
 
 (def rand-size 100000)
 
@@ -115,9 +120,9 @@
   => (trace options body)
    
   options {
-  :host => current host
+  :host => current host, defaults to InetAddress/getLocalHost if unspecifyed
   :span => span name
-  :trace-id => optional, new one will be created if not specifyed
+  :trace-id => optional, new one will be created if unspecifyed
   :scribe => scribe/zipkin endpoint configuration {:host h :port p}
   }
 

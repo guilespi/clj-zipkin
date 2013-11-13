@@ -50,6 +50,18 @@ together specifying the `trace-id` to use.
 
 ```
 
+** Parameters **
+
+Tracing parameters
+
+```clojure
+  :host => current host, defaults to InetAddress/getLocalHost if unspecified
+  :span => span name
+  :trace-id => optional, new one will be created if unspecified
+  :scribe => scribe/zipkin endpoint configuration {:host h :port p}
+```
+
+
 ### Ring Handler
 
 Work in progress
