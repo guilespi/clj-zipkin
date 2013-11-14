@@ -76,7 +76,7 @@
 (defmulti parse-item (fn [form] 
                        (cond 
                         (seq? form) :seq
-                        (vector? form) :vec
+                        (vector? form) :vector
                         :else :default)))
 
 ;;if found a call to original trace in the ast
@@ -90,7 +90,7 @@
     (let [[_ data body] form]
       (list* 'clj-zipkin.tracer/trace* 
              data
-             (map parse-item body) 
+             (doall (map parse-item body)) 
              '()))
     (doall (map parse-item form))))
 
@@ -104,10 +104,10 @@
 
 (defmacro trace*
   "Creates a start/finish timestamp annotations span
-   for the code chunk received, defers actual logging to upper trace function"
+   for the code chunk received, defers actual logging to upper trace function."
   [{:keys [span host]} & body]
   (let [body (parse-item body)]
-    `(let [parent-id# ~'span-id ;(first (deref ~'parent-ids))
+    `(let [parent-id# ~'span-id
            ~'span-id (rand-int rand-size)
           ; _# (println "t" ~'trace-id "s" ~'span-id "p" parent-id#)
            start-time# (time/now)
