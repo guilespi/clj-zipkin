@@ -51,7 +51,9 @@
                    *default-service-name*)
     (throw (str "Invalid host value" (class host) "not supported"))))
 
-(def rand-size 100000)
+;;According to tryfer sources, zipkin has trouble recording traces with ids
+;;larger than (2 ** 56) - 1
+(def rand-max (dec (Math/pow 2 56)))
 
 (defn create-timestamp-span
   "Creates a new span with start/finish annotations"
@@ -108,7 +110,7 @@
   [{:keys [span host]} & body]
   (let [body (parse-item body)]
     `(let [parent-id# ~'span-id
-           ~'span-id (rand-int rand-size)
+           ~'span-id (rand-int rand-max)
           ; _# (println "t" ~'trace-id "s" ~'span-id "p" parent-id#)
            start-time# (time/now)
            result# ~@body
@@ -156,7 +158,7 @@
                                       :port ~(-> args first :scribe :port) 
                                       :category "zipkin")
          ~'trace-id (or ~(-> args first :trace-id)
-                        (rand-int rand-size))
+                        (rand-int rand-max))
          ~'span-list (atom [])
          ~'span-id nil
          result# (trace* ~(first args) ~@(rest args))
