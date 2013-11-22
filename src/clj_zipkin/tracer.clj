@@ -53,7 +53,7 @@
 
 ;;According to tryfer sources, zipkin has trouble recording traces with ids
 ;;larger than (2 ** 56) - 1
-(def rand-max (dec (Math/pow 2 56)))
+(def rand-max (dec (Math/pow 2 24)))
 
 (defn create-timestamp-span
   "Creates a new span with start/finish annotations"
