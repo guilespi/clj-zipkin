@@ -43,7 +43,8 @@
   [host]
   (condp = (class host)
     java.lang.String (Endpoint. (ip-str-to-int host) 0 *default-service-name*)
-    clojure.lang.PersistentArrayMap (Endpoint. (ip-str-to-int (:ip host)) 
+    clojure.lang.PersistentArrayMap (Endpoint. (ip-str-to-int (or (:ip host)
+                                                                  (.getHostAddress (java.net.InetAddress/getLocalHost)))) 
                                                (or (:port host) 0) 
                                                (or (:service host) *default-service-name*))
     nil (Endpoint. (ip-str-to-int (.getHostAddress (java.net.InetAddress/getLocalHost)))
@@ -54,6 +55,11 @@
 ;;According to tryfer sources, zipkin has trouble recording traces with ids
 ;;larger than (2 ** 56) - 1
 (def rand-max (dec (Math/pow 2 24)))
+
+(defn create-id 
+  "Creates a new id to be used as trace or span id"
+  []
+  (rand-int rand-max))
 
 (defn create-timestamp-span
   "Creates a new span with start/finish annotations"
@@ -107,10 +113,10 @@
 (defmacro trace*
   "Creates a start/finish timestamp annotations span
    for the code chunk received, defers actual logging to upper trace function."
-  [{:keys [span host]} & body]
+  [{:keys [span host span-id]} & body]
   (let [body (parse-item body)]
     `(let [parent-id# ~'span-id
-           ~'span-id (rand-int rand-max)
+           ~'span-id (or ~span-id (create-id))
           ; _# (println "t" ~'trace-id "s" ~'span-id "p" parent-id#)
            start-time# (time/now)
            result# ~@body
@@ -158,9 +164,9 @@
                                       :port ~(-> args first :scribe :port) 
                                       :category "zipkin")
          ~'trace-id (or ~(-> args first :trace-id)
-                        (rand-int rand-max))
+                        (create-id))
          ~'span-list (atom [])
-         ~'span-id nil
+         ~'span-id ~(-> args first :parent-span-id)                     
          result# (trace* ~(first args) ~@(rest args))
          _# (scribe/log logger# (deref ~'span-list))]
      result#))
