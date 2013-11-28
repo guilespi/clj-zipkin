@@ -160,8 +160,8 @@
        (trace {:span \"OTHER\"}
          (..code...))))"
   [& args]
-  `(let [logger# (scribe/async-logger :host ~(-> args first :scribe :host) 
-                                      :port ~(-> args first :scribe :port) 
+  `(let [logger# (scribe/async-logger :host (-> ~(-> args first :scribe) :host) 
+                                      :port (-> ~(-> args first :scribe) :port) 
                                       :category "zipkin")
          ~'trace-id (or ~(-> args first :trace-id)
                         (create-id))
