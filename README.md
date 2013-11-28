@@ -6,7 +6,7 @@ Zipkin tracing instrumentation for Clojure applications.
 
 Add the following dependency to your `project.clj` file:
 
-       [clj-zipkin "0.1.1"]
+       [clj-zipkin "0.1.2"]
 
 ### Tracing
 
@@ -54,13 +54,22 @@ together specifying the `trace-id` to use.
 
 Tracing parameters
 
-```clojure
+```
   :host => current host, defaults to InetAddress/getLocalHost if unspecified
   :span => span name
   :trace-id => optional, new one will be created if unspecified
+  :span-id => optional, current span-id, useful to append annotations or to keep track of created id
+  :parent-span-id => optional, parent span-id, this span will be nested
   :scribe => scribe/zipkin endpoint configuration {:host h :port p}
 ```
 
+The `host` parameter can also be a structured hash-map
+
+```clojure
+   {:host "10.2.1.1" :port 3030 :service "Service Name"}
+```
+
+If not specified will default to port `0` and service `Unknown Service`.
 
 ### Ring Handler
 
@@ -88,6 +97,15 @@ Configuration received by the tracer handler is almost the same as the `trace` f
 ```
 
 If no `ip` is specified will default to `java.net.InetAddress/getLocalHost`
+
+##Example
+
+There's a small running example [here](examples/server.clj) showing how to chain different spans in a web server.
+
+This is how it looks that example in zipkin:
+
+![zipkin sample](doc/images/clj-zipkin-sample.png?raw=true)
+
 
 ##TODO
 

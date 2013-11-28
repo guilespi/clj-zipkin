@@ -1,4 +1,4 @@
-(defproject clj-zipkin "0.1.1"
+(defproject clj-zipkin "0.1.2"
   :description "Zipkin tracing instrumentation for Clojure applications."
   :url "https://github.com/guilespi/clj-zipkin"
   :license {:name "Eclipse Public License"
@@ -10,7 +10,10 @@
                  [clj-scribe "0.3.1"]
                  [byte-streams "0.1.6"] 
                  [clj-time "0.6.0"]]
-  :profiles {:dev {:dependencies [[ring-mock "0.1.5"]]}}
+  :test-paths ["test" "examples"]
+  :profiles {:dev {:dependencies [[ring-mock "0.1.5"]
+                                  [compojure "1.1.6"]
+                                  [ring "1.2.1"]]}}
   :plugins [[lein-thriftc "0.1.0"]]
   :prep-tasks ["thriftc"]
   :javac-options ["-Xlint:unchecked"])
