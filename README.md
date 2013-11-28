@@ -6,7 +6,7 @@ Zipkin tracing instrumentation for Clojure applications.
 
 Add the following dependency to your `project.clj` file:
 
-       [clj-zipkin "0.1.0"]
+       [clj-zipkin "0.1.1"]
 
 ### Tracing
 
@@ -64,7 +64,36 @@ Tracing parameters
 
 ### Ring Handler
 
-Work in progress
+A ring handler is available for automated tracing of incoming requests
+
+```clojure
+   (require '[clj-zipkin.middleware :as m])
+  
+   (defroutes routes
+     (GET "/" [] "<h1>Hello World</h1>")
+     (route/not-found "<h1>Page not found</h1>"))
+
+   (def app
+       (-> routes
+       (m/request-tracer {:scribe {:host "localhost" :port 9410}
+                          :service "WebServer"})))
+   
+```
+
+Configuration received by the tracer handler is almost the same as the `trace` function defined above, so it also supports a `host` parameter.
+
+```clojure
+(m/request-tracer {:scribe {:host "localhost" :port 9410}
+                   :host {:port 2020 :service "MyService"}}))
+```
+
+If no `ip` is specified will default to `java.net.InetAddress/getLocalHost`
+
+##TODO
+
+* Binary Annotations
+* Dynamic Annotations support in the API
+* Change span annotations default text?
 
 ## License
 
