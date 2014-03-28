@@ -6,7 +6,7 @@ Zipkin tracing instrumentation for Clojure applications.
 
 Add the following dependency to your `project.clj` file:
 
-       [clj-zipkin "0.1.2"]
+       [clj-zipkin "0.1.3"]
 
 ### Tracing
 
@@ -71,6 +71,72 @@ The `host` parameter can also be a structured hash-map
 
 If not specified will default to port `0` and service `Unknown Service`.
 
+#### Connection
+
+The `make-logger` function creates a logger object to be reused among different tracing calls.
+
+Use it in order to avoid creation of a new connection for each logged span.
+
+```clojure
+
+(def conn (t/make-logger {:host "zipkin.host" :port 9410}))
+
+(t/trace {:host "10.2.1.2" :span "GET" :scribe conn}
+         (..code..))
+
+```
+### Thread based tracing
+
+In the particular case you can't or really don't want to wrap your code in the `trace` macro call, there's a set of apis using [Thread Local Storage][1] with the `start` and `close` span api calls decoupled.
+
+Require the namespace `tls`, for thread local storage, or thread local spans.
+
+```clojure
+(:require [clj-zipkin.tracer :as t]
+          [clj-zipkin.tls :as tls])
+```
+
+**Start span**
+
+At your logging entry point create the new span, this operation doesn't log a thing to zipkin just yet.
+
+```clojure
+;;this should happen at entry point
+(tls/start-span {:operation "GET" 
+                 :host "10.2.1.1" 
+                 :trace-id trace-id
+                 :parent-id parent-id})
+```
+
+There's no need to keep track of state or variables since it's stored as thread state. 
+
+**Propagation** 
+
+If somewhere inside your traced code you need to retrieve the current trace or span ids - to propagate to other services for instance -, use the `get-span` api call.
+
+```clojure
+(:trace-id (tls/get-span))
+=> 12345
+```
+
+The variables `trace-id` and `span-id` are available for proper trace propagation.
+
+**Annotations**
+
+If some information is collected during the operation, it's possible to append annotations to the thread local span using the `add-annotation` api call. `add-annotation` receives a map with name/values to annotate.
+
+```clojure
+(tls/add-annotation {:n1 1 :n2 "da"})
+```
+
+**Closing span**
+
+When span is finished and ready to be logged to zipkin, issue a `close-span` call passing a logger connection parameter.
+
+```
+(tls/close-span (t/make-logger {:host "localhost" :port 9410}))
+```
+
 ### Ring Handler
 
 A ring handler is available for automated tracing of incoming requests
@@ -119,3 +185,5 @@ Copyright © 2013 Guillermo Winkler
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
+
+[1]: http://docs.oracle.com/javase/7/docs/api/java/lang/ThreadLocal.html
