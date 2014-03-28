@@ -110,6 +110,23 @@
   [item]
   item)
 
+(defn make-logger
+  "Creates a new scribe connection object, config should be a 
+   map with scribe endpoint configuration:
+
+   => {:host h :port p}"
+  ([config]
+     (make-logger config "zipkin"))
+  ([config category]
+     (scribe/async-logger :host (:host config) 
+                          :port (:port config) 
+                          :category category)))
+
+(defn log 
+  "Forward log to scribe"
+  [connection span-list]
+  (scribe/log connection span-list))
+
 (defmacro trace*
   "Creates a start/finish timestamp annotations span
    for the code chunk received, defers actual logging to upper trace function."
@@ -160,14 +177,13 @@
        (trace {:span \"OTHER\"}
          (..code...))))"
   [& args]
-  `(let [logger# (scribe/async-logger :host (-> ~(-> args first :scribe) :host) 
-                                      :port (-> ~(-> args first :scribe) :port) 
-                                      :category "zipkin")
+  `(let [logger# ~(if (symbol? (-> args first :scribe)) 
+                    (-> args first :scribe)
+                   `(make-logger ~(-> args first :scribe)))
          ~'trace-id (or ~(-> args first :trace-id)
                         (create-id))
          ~'span-list (atom [])
          ~'span-id ~(-> args first :parent-span-id)                     
          result# (trace* ~(first args) ~@(rest args))
-         _# (scribe/log logger# (deref ~'span-list))]
+         _# (log logger# (deref ~'span-list))]
      result#))
-
