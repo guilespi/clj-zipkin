@@ -35,7 +35,7 @@
                               :trace-id trace-id
                               :span-id (tracer/create-id)
                               :parent-id parent-id
-                              :annotations []
+                              :annotations {}
                               :start-time (time/now)})
   @@thread-local-span)
 
@@ -43,7 +43,7 @@
   "Adds annotation to the thread local span"
   [annotation]
   (when @@thread-local-span
-    (swap! @thread-local-span update-in [:annotations] conj annotation)))
+    (swap! @thread-local-span update-in [:annotations] merge annotation)))
 
 (defn get-span
   "Retrieves the current thread span from TLS."
@@ -66,6 +66,7 @@
                                                    (:span-id span)  
                                                    (:parent-id span)
                                                    (:start-time span) 
-                                                   (time/now))]]
+                                                   (time/now)
+                                                   (:annotations span))]]
       (tracer/log connection span-list)
       (clear-span))))

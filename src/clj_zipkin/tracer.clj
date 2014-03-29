@@ -3,13 +3,24 @@
             [clojure.data.codec.base64 :as b64]
             [clj-scribe :as scribe]
             [thrift-clj.gen.core :as c]
-            [byte-streams]
+            [thrift-clj.thrift.types :as thrift-types]
             [clj-time.core :as time]
             [clj-time.coerce :as time-coerce]))
 
-;(def bann (BinaryAnnotation. "name" (byte-streams/convert "abcd" java.nio.ByteBuffer) AnnotationType/STRING nil)) 
-
 (def ^:dynamic *default-service-name* "Unknown Service")
+
+;;the following *hack* is to avoid binary annotations being
+;;stringified by the type wrapper, problem is caused because
+;;Value field in BinaryAnnotation.java is a binary hinted as a String:
+;;
+;;  TField VALUE_FIELD_DESC = new org.apache.thrift.protocol.TField("value", org.apache.thrift.protocol.TType.STRING, (short)2);
+;;  public ByteBuffer value; // required
+;;
+;;java file is autogen by thriftc so some validation should be done there
+;;by a caritative soul. Now we just avoid string wrapping hijacking the mm
+(def my-extend-field (var-get (find-var 'thrift-clj.thrift.types/extend-field-metadata-map)))
+(remove-method my-extend-field :string)
+
 
 (thrift/import
   (:types [com.twitter.zipkin.gen 
@@ -63,12 +74,19 @@
 
 (defn create-timestamp-span
   "Creates a new span with start/finish annotations"
-  [span host trace-id span-id parent-id start finish]
+  [span host trace-id span-id parent-id start finish annotations]
   (let [endpoint (host->endpoint host)
         start-annotation (Annotation. (* 1000 (time-coerce/to-long start)) 
                                       (str "start:" (name span)) endpoint 0)
         finish-annotation (Annotation. (* 1000 (time-coerce/to-long finish)) 
-                                       (str "end:" (name span)) endpoint 0)]
+                                       (str "end:" (name span)) endpoint 0)
+        binary-annotations (mapv (fn [[k v]]
+                                   (BinaryAnnotation. (name k)
+                                                      (java.nio.ByteBuffer/wrap
+                                                       (.getBytes (str v)))
+                                                      AnnotationType/STRING
+                                                      endpoint))
+                                 annotations)]
     (thrift->base64 
      (Span. trace-id
             (name span) 
@@ -76,7 +94,7 @@
             parent-id
             [start-annotation
              finish-annotation] 
-            []
+            binary-annotations
             0))))
 
 ;;tracing macro for nested recording
@@ -130,7 +148,7 @@
 (defmacro trace*
   "Creates a start/finish timestamp annotations span
    for the code chunk received, defers actual logging to upper trace function."
-  [{:keys [span host span-id]} & body]
+  [{:keys [span host span-id annotations]} & body]
   (let [body (parse-item body)]
     `(let [parent-id# ~'span-id
            ~'span-id (or ~span-id (create-id))
@@ -140,7 +158,8 @@
            end-time# (time/now)
            span# (create-timestamp-span ~span ~host ~'trace-id 
                                         ~'span-id parent-id#
-                                        start-time# end-time#)
+                                        start-time# end-time#
+                                        ~annotations)
            ;parent spans added at the end, so cons 
            _# (swap! ~'span-list (fn [l#] (cons span# l#)))]
        result#)))
@@ -153,6 +172,7 @@
   :host => current host, defaults to InetAddress/getLocalHost if unspecifyed
   :span => span name
   :trace-id => optional, new one will be created if unspecifyed
+  :annotations {:k :v} => key/value map to annotate this trace
   :scribe => scribe/zipkin endpoint configuration {:host h :port p}
   }
 

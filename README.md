@@ -6,7 +6,7 @@ Zipkin tracing instrumentation for Clojure applications.
 
 Add the following dependency to your `project.clj` file:
 
-       [clj-zipkin "0.1.3"]
+       [clj-zipkin "0.1.4"]
 
 ### Tracing
 
@@ -57,6 +57,7 @@ Tracing parameters
 ```
   :host => current host, defaults to InetAddress/getLocalHost if unspecified
   :span => span name
+  :annotations {:k :v} => key/value map to annotate this trace
   :trace-id => optional, new one will be created if unspecified
   :span-id => optional, current span-id, useful to append annotations or to keep track of created id
   :parent-span-id => optional, parent span-id, this span will be nested
@@ -89,7 +90,8 @@ Use it in order to avoid creation of a new connection for each logged span.
 
 In the particular case you can't or really don't want to wrap your code in the `trace` macro call, there's a set of apis using [Thread Local Storage][1] with the `start` and `close` span api calls decoupled.
 
-Require the namespace `tls`, for thread local storage, or thread local spans.
+Require the namespace `tls`, for thread local storage (or thread local
+spans if you like it more).
 
 ```clojure
 (:require [clj-zipkin.tracer :as t]
@@ -128,6 +130,9 @@ If some information is collected during the operation, it's possible to append a
 ```clojure
 (tls/add-annotation {:n1 1 :n2 "da"})
 ```
+
+This map will be merged with the previously annotated values for this
+thread span.
 
 **Closing span**
 
@@ -175,8 +180,6 @@ This is how it looks that example in zipkin:
 
 ##TODO
 
-* Binary Annotations
-* Dynamic Annotations support in the API
 * Change span annotations default text?
 
 ## License
